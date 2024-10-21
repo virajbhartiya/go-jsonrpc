@@ -554,7 +554,6 @@ func (fn *rpcFunc) processResponse(resp clientResponse, rval reflect.Value) []re
 	if fn.errOut != -1 {
 		out[fn.errOut] = reflect.New(errorType).Elem()
 		if resp.Error != nil {
-
 			out[fn.errOut].Set(resp.Error.val(fn.client.errors))
 		}
 	}
