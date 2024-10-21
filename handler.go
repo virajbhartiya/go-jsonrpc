@@ -23,7 +23,13 @@ import (
 
 type RawParams json.RawMessage
 
-var rtRawParams = reflect.TypeOf(RawParams{})
+var (
+	_               error         = (*respError)(nil)
+	_               ErrorWithData = (*respError)(nil)
+	marshalableRT                 = reflect.TypeOf(new(marshalable)).Elem()
+	unmarshalableRT               = reflect.TypeOf(new(UnmarshalJSONRPCError)).Elem()
+	rtRawParams                   = reflect.TypeOf(RawParams{})
+)
 
 // todo is there a better way to tell 'struct with any number of fields'?
 func DecodeParams[T any](p RawParams) (T, error) {
@@ -69,8 +75,8 @@ const DEFAULT_MAX_REQUEST_SIZE = 100 << 20 // 100 MiB
 type respError struct {
 	Code    ErrorCode       `json:"code"`
 	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
 	Meta    json.RawMessage `json:"meta,omitempty"`
-	Data    interface{}     `json:"data,omitempty"`
 }
 
 func (e *respError) Error() string {
@@ -80,14 +86,9 @@ func (e *respError) Error() string {
 	return e.Message
 }
 
-func (e *respError) ErrorData() interface{} {
+func (e *respError) ErrorData() any {
 	return e.Data
 }
-
-var (
-	marshalableRT = reflect.TypeOf(new(marshalable)).Elem()
-	errorsRT      = reflect.TypeOf(new(ErrorWithData)).Elem()
-)
 
 func (e *respError) val(errors *Errors) reflect.Value {
 	if errors != nil {
@@ -99,23 +100,11 @@ func (e *respError) val(errors *Errors) reflect.Value {
 			} else {
 				v = reflect.New(t)
 			}
-
-			if len(e.Meta) > 0 && v.Type().Implements(marshalableRT) {
+			if v.Type().Implements(unmarshalableRT) {
+				_ = v.Interface().(UnmarshalJSONRPCError).UnmarshalJSONRPCError(e.Message, e.Data, e.Meta)
+			} else if len(e.Meta) > 0 && v.Type().Implements(marshalableRT) {
 				_ = v.Interface().(marshalable).UnmarshalJSON(e.Meta)
 			}
-
-			msgField := v.Elem().FieldByName("Message")
-			if msgField.IsValid() && msgField.CanSet() && msgField.Kind() == reflect.String {
-				msgField.SetString(e.Message)
-			}
-
-			if v.Type().Implements(errorsRT) {
-				dataField := v.Elem().FieldByName("Data")
-				if dataField.IsValid() && dataField.CanSet() {
-					dataField.Set(reflect.ValueOf(e.Data))
-				}
-			}
-
 			if t.Kind() != reflect.Ptr {
 				v = v.Elem()
 			}
@@ -384,7 +373,11 @@ func (s *handler) createError(err error) *respError {
 
 	var ed ErrorWithData
 	if errors.As(err, &ed) {
-		out.Data = ed.ErrorData()
+		if md, err := json.Marshal(ed.ErrorData()); err == nil {
+			out.Data = md
+		} else {
+			log.Warnf("Failed to marshal error data: %v", err)
+		}
 	}
 
 	return out
@@ -540,12 +533,14 @@ func (s *handler) handle(ctx context.Context, req request, w func(func(io.Writer
 				Code:    1,
 				Message: err.Error(),
 			}
-
 			var ed ErrorWithData
 			if errors.As(err, &ed) {
-				respErr.Data = ed.ErrorData()
+				if md, err := json.Marshal(ed.ErrorData()); err == nil {
+					respErr.Data = md
+				} else {
+					log.Warnf("Failed to marshal error data: %v", err)
+				}
 			}
-
 			resp.Error = respErr
 		} else {
 			resp.Result = res
