@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -24,11 +23,10 @@ import (
 type RawParams json.RawMessage
 
 var (
-	_               error         = (*respError)(nil)
-	_               ErrorWithData = (*respError)(nil)
-	marshalableRT                 = reflect.TypeOf(new(marshalable)).Elem()
-	unmarshalableRT               = reflect.TypeOf(new(UnmarshalJSONRPCError)).Elem()
-	rtRawParams                   = reflect.TypeOf(RawParams{})
+	_               error = (*JSONRPCError)(nil)
+	marshalableRT         = reflect.TypeOf(new(marshalable)).Elem()
+	unmarshalableRT       = reflect.TypeOf(new(UnmarshalJSONRPCError)).Elem()
+	rtRawParams           = reflect.TypeOf(RawParams{})
 )
 
 // todo is there a better way to tell 'struct with any number of fields'?
@@ -72,25 +70,25 @@ type request struct {
 // Configured by WithMaxRequestSize.
 const DEFAULT_MAX_REQUEST_SIZE = 100 << 20 // 100 MiB
 
-type respError struct {
+type JSONRPCError struct {
 	Code    ErrorCode       `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
 	Meta    json.RawMessage `json:"meta,omitempty"`
 }
 
-func (e *respError) Error() string {
+func (e *JSONRPCError) Error() string {
 	if e.Code >= -32768 && e.Code <= -32000 {
 		return fmt.Sprintf("RPC error (%d): %s", e.Code, e.Message)
 	}
 	return e.Message
 }
 
-func (e *respError) ErrorData() any {
+func (e *JSONRPCError) ErrorData() any {
 	return e.Data
 }
 
-func (e *respError) val(errors *Errors) reflect.Value {
+func (e *JSONRPCError) val(errors *Errors) reflect.Value {
 	if errors != nil {
 		t, ok := errors.byCode[e.Code]
 		if ok {
@@ -101,7 +99,7 @@ func (e *respError) val(errors *Errors) reflect.Value {
 				v = reflect.New(t)
 			}
 			if v.Type().Implements(unmarshalableRT) {
-				_ = v.Interface().(UnmarshalJSONRPCError).UnmarshalJSONRPCError(e.Message, e.Data, e.Meta)
+				_ = v.Interface().(UnmarshalJSONRPCError).UnmarshalJSONRPCError(*e)
 			} else if len(e.Meta) > 0 && v.Type().Implements(marshalableRT) {
 				_ = v.Interface().(marshalable).UnmarshalJSON(e.Meta)
 			}
@@ -116,10 +114,10 @@ func (e *respError) val(errors *Errors) reflect.Value {
 }
 
 type response struct {
-	Jsonrpc string      `json:"jsonrpc"`
-	Result  interface{} `json:"result,omitempty"`
-	ID      interface{} `json:"id"`
-	Error   *respError  `json:"error,omitempty"`
+	Jsonrpc string        `json:"jsonrpc"`
+	Result  interface{}   `json:"result,omitempty"`
+	ID      interface{}   `json:"id"`
+	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
 func (r response) MarshalJSON() ([]byte, error) {
@@ -348,7 +346,7 @@ func (s *handler) getSpan(ctx context.Context, req request) (context.Context, *t
 	return ctx, span
 }
 
-func (s *handler) createError(err error) *respError {
+func (s *handler) createError(err error) *JSONRPCError {
 	var code ErrorCode = 1
 	if s.errors != nil {
 		c, ok := s.errors.byType[reflect.TypeOf(err)]
@@ -357,26 +355,25 @@ func (s *handler) createError(err error) *respError {
 		}
 	}
 
-	out := &respError{
+	out := &JSONRPCError{
 		Code:    code,
 		Message: err.Error(),
 	}
 
-	if m, ok := err.(marshalable); ok {
+	switch m := err.(type) {
+	case MarshalJSONRPCError:
+		o, err := m.MarshalJSONRPCError()
+		if err != nil {
+			log.Warnf("Failed to marshal error metadata: %v", err)
+		} else {
+			out = &o
+		}
+	case marshalable:
 		meta, marshalErr := m.MarshalJSON()
 		if marshalErr == nil {
 			out.Meta = meta
 		} else {
 			log.Warnf("Failed to marshal error metadata: %v", marshalErr)
-		}
-	}
-
-	var ed ErrorWithData
-	if errors.As(err, &ed) {
-		if md, err := json.Marshal(ed.ErrorData()); err == nil {
-			out.Data = md
-		} else {
-			log.Warnf("Failed to marshal error data: %v", err)
 		}
 	}
 
@@ -529,19 +526,10 @@ func (s *handler) handle(ctx context.Context, req request, w func(func(io.Writer
 
 			log.Warnf("failed to setup channel in RPC call to '%s': %+v", req.Method, err)
 			stats.Record(ctx, metrics.RPCResponseError.M(1))
-			respErr := &respError{
+			resp.Error = &JSONRPCError{
 				Code:    1,
 				Message: err.Error(),
 			}
-			var ed ErrorWithData
-			if errors.As(err, &ed) {
-				if md, err := json.Marshal(ed.ErrorData()); err == nil {
-					respErr.Data = md
-				} else {
-					log.Warnf("Failed to marshal error data: %v", err)
-				}
-			}
-			resp.Error = respErr
 		} else {
 			resp.Result = res
 		}

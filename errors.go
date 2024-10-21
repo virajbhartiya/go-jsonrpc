@@ -59,12 +59,10 @@ type marshalable interface {
 	json.Unmarshaler
 }
 
-// ErrorWithData contains extra data to explain the error
-type ErrorWithData interface {
-	error
-	ErrorData() any // returns the error data
+type UnmarshalJSONRPCError interface {
+	UnmarshalJSONRPCError(JSONRPCError) error
 }
 
-type UnmarshalJSONRPCError interface {
-	UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error
+type MarshalJSONRPCError interface {
+	MarshalJSONRPCError() (JSONRPCError, error)
 }

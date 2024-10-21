@@ -20,10 +20,19 @@ func (e *SimpleError) Error() string {
 	return e.Message
 }
 
-func (e *SimpleError) UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error {
-	e.Message = message
+func (e *SimpleError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
+	e.Message = jerr.Message
 	return nil
 }
+
+func (e *SimpleError) MarshalJSONRPCError() (JSONRPCError, error) {
+	return JSONRPCError{Message: e.Message}, nil
+}
+
+var (
+	_ UnmarshalJSONRPCError = (*SimpleError)(nil)
+	_ MarshalJSONRPCError   = (*SimpleError)(nil)
+)
 
 type DataStringError struct {
 	Message string `json:"message"`
@@ -38,13 +47,26 @@ func (e *DataStringError) ErrorData() any {
 	return e.Data
 }
 
-func (e *DataStringError) UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error {
-	e.Message = message
-	if err := json.Unmarshal(data, &e.Data); err != nil {
+func (e *DataStringError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
+	e.Message = jerr.Message
+	if err := json.Unmarshal(jerr.Data, &e.Data); err != nil {
 		return err
 	}
 	return nil
 }
+
+func (e *DataStringError) MarshalJSONRPCError() (JSONRPCError, error) {
+	data, err := json.Marshal(e.Data)
+	if err != nil {
+		return JSONRPCError{}, err
+	}
+	return JSONRPCError{Message: e.Message, Data: data}, nil
+}
+
+var (
+	_ UnmarshalJSONRPCError = (*DataStringError)(nil)
+	_ MarshalJSONRPCError   = (*DataStringError)(nil)
+)
 
 type DataComplexError struct {
 	Message      string
@@ -59,13 +81,26 @@ func (e *DataComplexError) ErrorData() any {
 	return e.internalData
 }
 
-func (e *DataComplexError) UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error {
-	e.Message = message
-	if err := json.Unmarshal(data, &e.internalData); err != nil {
+func (e *DataComplexError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
+	e.Message = jerr.Message
+	if err := json.Unmarshal(jerr.Data, &e.internalData); err != nil {
 		return err
 	}
 	return nil
 }
+
+func (e *DataComplexError) MarshalJSONRPCError() (JSONRPCError, error) {
+	data, err := json.Marshal(e.internalData)
+	if err != nil {
+		return JSONRPCError{}, err
+	}
+	return JSONRPCError{Message: e.Message, Data: data}, nil
+}
+
+var (
+	_ UnmarshalJSONRPCError = (*DataComplexError)(nil)
+	_ MarshalJSONRPCError   = (*DataComplexError)(nil)
+)
 
 type MetaError struct {
 	Message string
@@ -158,14 +193,14 @@ func TestRespErrorVal(t *testing.T) {
 	// Define test cases
 	testCases := []struct {
 		name            string
-		respError       *respError
+		respError       *JSONRPCError
 		expectedType    interface{}
 		expectedMessage string
 		verify          func(t *testing.T, err error)
 	}{
 		{
 			name: "StaticError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    1000,
 				Message: "this is ignored",
 			},
@@ -174,7 +209,7 @@ func TestRespErrorVal(t *testing.T) {
 		},
 		{
 			name: "SimpleError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    1001,
 				Message: "simple error occurred",
 			},
@@ -183,7 +218,7 @@ func TestRespErrorVal(t *testing.T) {
 		},
 		{
 			name: "DataStringError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    1002,
 				Message: "data error occurred",
 				Data:    json.RawMessage(`"additional data"`),
@@ -196,7 +231,7 @@ func TestRespErrorVal(t *testing.T) {
 		},
 		{
 			name: "DataComplexError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    1003,
 				Message: "data error occurred",
 				Data:    json.RawMessage(`{"foo":"boop","bar":101}`),
@@ -209,7 +244,7 @@ func TestRespErrorVal(t *testing.T) {
 		},
 		{
 			name: "MetaError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    1004,
 				Message: "meta error occurred",
 				Meta: func() json.RawMessage {
@@ -230,7 +265,7 @@ func TestRespErrorVal(t *testing.T) {
 		},
 		{
 			name: "ComplexError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    1005,
 				Message: "complex error occurred",
 				Data:    json.RawMessage(`"complex data"`),
@@ -253,15 +288,15 @@ func TestRespErrorVal(t *testing.T) {
 		},
 		{
 			name: "UnregisteredError",
-			respError: &respError{
+			respError: &JSONRPCError{
 				Code:    9999,
 				Message: "unregistered error occurred",
 				Data:    json.RawMessage(`"some data"`),
 			},
-			expectedType:    &respError{},
+			expectedType:    &JSONRPCError{},
 			expectedMessage: "unregistered error occurred",
 			verify: func(t *testing.T, err error) {
-				require.Equal(t, json.RawMessage(`"some data"`), err.(*respError).ErrorData())
+				require.Equal(t, json.RawMessage(`"some data"`), err.(*JSONRPCError).ErrorData())
 			},
 		},
 	}
