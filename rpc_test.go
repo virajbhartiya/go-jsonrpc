@@ -1202,9 +1202,9 @@ func TestUserError(t *testing.T) {
 	)
 
 	errs := NewErrors()
-	errs.Register(EBad, new(ErrSomethingBad), nil)
-	errs.Register(EBad2, new(*ErrSomethingBad), nil)
-	errs.Register(EMy, new(*ErrMyErr), nil)
+	errs.Register(EBad, new(ErrSomethingBad))
+	errs.Register(EBad2, new(*ErrSomethingBad))
+	errs.Register(EMy, new(*ErrMyErr))
 
 	rpcServer := NewServer(WithServerErrors(errs))
 	rpcServer.Register("ErrHandler", serverHandler)

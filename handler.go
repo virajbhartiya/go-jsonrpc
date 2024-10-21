@@ -27,7 +27,7 @@ var (
 	_               error         = (*respError)(nil)
 	_               ErrorWithData = (*respError)(nil)
 	marshalableRT                 = reflect.TypeOf(new(marshalable)).Elem()
-	errorWithDataRT               = reflect.TypeOf(new(ErrorWithData)).Elem()
+	unmarshalableRT               = reflect.TypeOf(new(UnmarshalJSONRPCError)).Elem()
 	rtRawParams                   = reflect.TypeOf(RawParams{})
 )
 
@@ -75,8 +75,8 @@ const DEFAULT_MAX_REQUEST_SIZE = 100 << 20 // 100 MiB
 type respError struct {
 	Code    ErrorCode       `json:"code"`
 	Message string          `json:"message"`
-	Meta    json.RawMessage `json:"meta,omitempty"`
 	Data    json.RawMessage `json:"data,omitempty"`
+	Meta    json.RawMessage `json:"meta,omitempty"`
 }
 
 func (e *respError) Error() string {
@@ -91,16 +91,28 @@ func (e *respError) ErrorData() any {
 }
 
 func (e *respError) val(errors *Errors) reflect.Value {
-	var err error = e
 	if errors != nil {
-		fmt.Printf("e.Code: %d, meta: %s, data: %s\n", e.Code, e.Meta, e.Data)
 		t, ok := errors.byCode[e.Code]
 		if ok {
-			err = t(e.Message, e.Data, e.Meta)
+			var v reflect.Value
+			if t.Kind() == reflect.Ptr {
+				v = reflect.New(t.Elem())
+			} else {
+				v = reflect.New(t)
+			}
+			if v.Type().Implements(unmarshalableRT) {
+				_ = v.Interface().(UnmarshalJSONRPCError).UnmarshalJSONRPCError(e.Message, e.Data, e.Meta)
+			} else if len(e.Meta) > 0 && v.Type().Implements(marshalableRT) {
+				_ = v.Interface().(marshalable).UnmarshalJSON(e.Meta)
+			}
+			if t.Kind() != reflect.Ptr {
+				v = v.Elem()
+			}
+			return v
 		}
 	}
 
-	return reflect.ValueOf(err)
+	return reflect.ValueOf(e)
 }
 
 type response struct {

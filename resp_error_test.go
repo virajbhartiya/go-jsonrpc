@@ -20,6 +20,11 @@ func (e *SimpleError) Error() string {
 	return e.Message
 }
 
+func (e *SimpleError) UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error {
+	e.Message = message
+	return nil
+}
+
 type DataStringError struct {
 	Message string `json:"message"`
 	Data    string `json:"data"`
@@ -33,6 +38,14 @@ func (e *DataStringError) ErrorData() any {
 	return e.Data
 }
 
+func (e *DataStringError) UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error {
+	e.Message = message
+	if err := json.Unmarshal(data, &e.Data); err != nil {
+		return err
+	}
+	return nil
+}
+
 type DataComplexError struct {
 	Message      string
 	internalData ComplexData
@@ -44,6 +57,14 @@ func (e *DataComplexError) Error() string {
 
 func (e *DataComplexError) ErrorData() any {
 	return e.internalData
+}
+
+func (e *DataComplexError) UnmarshalJSONRPCError(message string, data json.RawMessage, meta json.RawMessage) error {
+	e.Message = message
+	if err := json.Unmarshal(data, &e.internalData); err != nil {
+		return err
+	}
+	return nil
 }
 
 type MetaError struct {
@@ -127,30 +148,12 @@ type ComplexData struct {
 func TestRespErrorVal(t *testing.T) {
 	// Initialize the Errors struct and register error types
 	errorsMap := NewErrors()
-	errorsMap.Register(1000, new(*StaticError), nil)
-	errorsMap.Register(1001, new(*SimpleError), func(message string, data json.RawMessage, meta json.RawMessage) error {
-		return &SimpleError{Message: message}
-	})
-	errorsMap.Register(1002, new(*DataStringError), func(message string, data json.RawMessage, meta json.RawMessage) error {
-		d := &DataStringError{
-			Message: message,
-		}
-		if err := json.Unmarshal(data, &d.Data); err != nil {
-			return err
-		}
-		return d
-	})
-	errorsMap.Register(1003, new(*DataComplexError), func(message string, data json.RawMessage, meta json.RawMessage) error {
-		d := &DataComplexError{
-			Message: message,
-		}
-		if err := json.Unmarshal(data, &d.internalData); err != nil {
-			return err
-		}
-		return d
-	})
-	errorsMap.Register(1004, new(*MetaError), nil)
-	errorsMap.Register(1005, new(*ComplexError), nil)
+	errorsMap.Register(1000, new(*StaticError))
+	errorsMap.Register(1001, new(*SimpleError))
+	errorsMap.Register(1002, new(*DataStringError))
+	errorsMap.Register(1003, new(*DataComplexError))
+	errorsMap.Register(1004, new(*MetaError))
+	errorsMap.Register(1005, new(*ComplexError))
 
 	// Define test cases
 	testCases := []struct {
