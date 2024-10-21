@@ -287,7 +287,7 @@ func TestRespErrorVal(t *testing.T) {
 			expectedType:    &JSONRPCError{},
 			expectedMessage: "unregistered error occurred",
 			verify: func(t *testing.T, err error) {
-				require.Equal(t, json.RawMessage(`"some data"`), err.(*JSONRPCError).ErrorData())
+				require.Equal(t, json.RawMessage(`"some data"`), err.(*JSONRPCError).Data)
 			},
 		},
 	}

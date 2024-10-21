@@ -84,10 +84,6 @@ func (e *JSONRPCError) Error() string {
 	return e.Message
 }
 
-func (e *JSONRPCError) ErrorData() any {
-	return e.Data
-}
-
 func (e *JSONRPCError) val(errors *Errors) reflect.Value {
 	if errors != nil {
 		t, ok := errors.byCode[e.Code]
