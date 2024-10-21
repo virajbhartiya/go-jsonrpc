@@ -59,10 +59,7 @@ type marshalable interface {
 	json.Unmarshaler
 }
 
-type UnmarshalJSONRPCError interface {
-	UnmarshalJSONRPCError(JSONRPCError) error
-}
-
-type MarshalJSONRPCError interface {
-	MarshalJSONRPCError() (JSONRPCError, error)
+type ConvertableJSONRPCError interface {
+	FromJSONRPCError(JSONRPCError) error
+	ToJSONRPCError() (JSONRPCError, error)
 }

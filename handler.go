@@ -25,7 +25,7 @@ type RawParams json.RawMessage
 var (
 	_               error = (*JSONRPCError)(nil)
 	marshalableRT         = reflect.TypeOf(new(marshalable)).Elem()
-	unmarshalableRT       = reflect.TypeOf(new(UnmarshalJSONRPCError)).Elem()
+	unmarshalableRT       = reflect.TypeOf(new(ConvertableJSONRPCError)).Elem()
 	rtRawParams           = reflect.TypeOf(RawParams{})
 )
 
@@ -99,7 +99,7 @@ func (e *JSONRPCError) val(errors *Errors) reflect.Value {
 				v = reflect.New(t)
 			}
 			if v.Type().Implements(unmarshalableRT) {
-				_ = v.Interface().(UnmarshalJSONRPCError).UnmarshalJSONRPCError(*e)
+				_ = v.Interface().(ConvertableJSONRPCError).FromJSONRPCError(*e)
 			} else if len(e.Meta) > 0 && v.Type().Implements(marshalableRT) {
 				_ = v.Interface().(marshalable).UnmarshalJSON(e.Meta)
 			}
@@ -361,8 +361,8 @@ func (s *handler) createError(err error) *JSONRPCError {
 	}
 
 	switch m := err.(type) {
-	case MarshalJSONRPCError:
-		o, err := m.MarshalJSONRPCError()
+	case ConvertableJSONRPCError:
+		o, err := m.ToJSONRPCError()
 		if err != nil {
 			log.Warnf("Failed to marshal error metadata: %v", err)
 		} else {

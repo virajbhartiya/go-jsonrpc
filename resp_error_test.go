@@ -20,19 +20,16 @@ func (e *SimpleError) Error() string {
 	return e.Message
 }
 
-func (e *SimpleError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
+func (e *SimpleError) FromJSONRPCError(jerr JSONRPCError) error {
 	e.Message = jerr.Message
 	return nil
 }
 
-func (e *SimpleError) MarshalJSONRPCError() (JSONRPCError, error) {
+func (e *SimpleError) ToJSONRPCError() (JSONRPCError, error) {
 	return JSONRPCError{Message: e.Message}, nil
 }
 
-var (
-	_ UnmarshalJSONRPCError = (*SimpleError)(nil)
-	_ MarshalJSONRPCError   = (*SimpleError)(nil)
-)
+var _ ConvertableJSONRPCError = (*SimpleError)(nil)
 
 type DataStringError struct {
 	Message string `json:"message"`
@@ -47,7 +44,7 @@ func (e *DataStringError) ErrorData() any {
 	return e.Data
 }
 
-func (e *DataStringError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
+func (e *DataStringError) FromJSONRPCError(jerr JSONRPCError) error {
 	e.Message = jerr.Message
 	if err := json.Unmarshal(jerr.Data, &e.Data); err != nil {
 		return err
@@ -55,7 +52,7 @@ func (e *DataStringError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
 	return nil
 }
 
-func (e *DataStringError) MarshalJSONRPCError() (JSONRPCError, error) {
+func (e *DataStringError) ToJSONRPCError() (JSONRPCError, error) {
 	data, err := json.Marshal(e.Data)
 	if err != nil {
 		return JSONRPCError{}, err
@@ -63,10 +60,7 @@ func (e *DataStringError) MarshalJSONRPCError() (JSONRPCError, error) {
 	return JSONRPCError{Message: e.Message, Data: data}, nil
 }
 
-var (
-	_ UnmarshalJSONRPCError = (*DataStringError)(nil)
-	_ MarshalJSONRPCError   = (*DataStringError)(nil)
-)
+var _ ConvertableJSONRPCError = (*DataStringError)(nil)
 
 type DataComplexError struct {
 	Message      string
@@ -81,7 +75,7 @@ func (e *DataComplexError) ErrorData() any {
 	return e.internalData
 }
 
-func (e *DataComplexError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
+func (e *DataComplexError) FromJSONRPCError(jerr JSONRPCError) error {
 	e.Message = jerr.Message
 	if err := json.Unmarshal(jerr.Data, &e.internalData); err != nil {
 		return err
@@ -89,7 +83,7 @@ func (e *DataComplexError) UnmarshalJSONRPCError(jerr JSONRPCError) error {
 	return nil
 }
 
-func (e *DataComplexError) MarshalJSONRPCError() (JSONRPCError, error) {
+func (e *DataComplexError) ToJSONRPCError() (JSONRPCError, error) {
 	data, err := json.Marshal(e.internalData)
 	if err != nil {
 		return JSONRPCError{}, err
@@ -97,10 +91,7 @@ func (e *DataComplexError) MarshalJSONRPCError() (JSONRPCError, error) {
 	return JSONRPCError{Message: e.Message, Data: data}, nil
 }
 
-var (
-	_ UnmarshalJSONRPCError = (*DataComplexError)(nil)
-	_ MarshalJSONRPCError   = (*DataComplexError)(nil)
-)
+var _ ConvertableJSONRPCError = (*DataComplexError)(nil)
 
 type MetaError struct {
 	Message string
